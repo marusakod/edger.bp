@@ -1,0 +1,45 @@
+{% set version = "0.1.0" %}
+
+package:
+  name: r-edger-bp
+  version: {{ version }}
+
+source:
+  url: https://github.com/wmacnair/edger.bp/archive/refs/tags/v{{ version }}.tar.gz
+  sha256: 9cdc55937fb27022c06caf3866a7b0c6621a4002811b4502157cb56fe9de6690
+
+build:
+  number: 0
+  string: r45_0
+  script: $R CMD INSTALL --build . ${R_ARGS}
+  ignore_run_exports:
+    - r-base
+
+requirements:
+  host:
+    - r-base ==4.5.3
+    - r-bpcells ==0.3.1
+    - bioconductor-edger ==4.8.2
+    - bioconductor-limma ==3.66.0
+  run:
+    - r-base ==4.5.3
+    - r-bpcells ==0.3.1
+    - bioconductor-edger ==4.8.2
+    - bioconductor-limma ==3.66.0
+
+test:
+  imports:
+    - edger.bp
+  commands:
+    - $R -e 'audit <- edger.bp::bp_check_versions(error = TRUE); stopifnot(all(audit$ok))'
+
+about:
+  home: https://github.com/wmacnair/edger.bp
+  license: GPL-3.0-only
+  license_family: GPL
+  license_file: LICENSE
+  summary: Memory-efficient edgeR workflows for BPCells matrices
+
+extra:
+  recipe-maintainers:
+    - wmacnair
