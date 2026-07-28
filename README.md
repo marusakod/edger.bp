@@ -6,6 +6,25 @@ Current high-level workflows are `bp_lrt()`, `bp_qlf()`, and `bp_treat()`.
 
 ## Installation
 
+### Conda
+
+Create the audited R 4.4 environment:
+
+```bash
+micromamba create -n edger-bp \
+  --override-channels \
+  --channel https://raw.githubusercontent.com/wmacnair/edger.bp/conda-channel \
+  --channel conda-forge \
+  --channel bioconda \
+  --strict-channel-priority \
+  r-edger-bp=0.1.0=r44_0
+```
+
+An audited R 4.5 build is also available as `r-edger-bp=0.1.0=r45_0`.
+See [the Conda channel documentation](conda/README.md) for details.
+
+### R source package
+
 Install the R package dependencies first:
 
 ```r
