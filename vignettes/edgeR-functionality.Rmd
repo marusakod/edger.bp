@@ -1,0 +1,345 @@
+---
+title: "edgeR functionality in edger.bp"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{edgeR functionality in edger.bp}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment = "#>",
+    message = FALSE,
+    warning = FALSE
+)
+```
+
+`edger.bp` is a BPCells-backed implementation layer for selected edgeR
+workflows. The package aims to reproduce edgeR results for supported inputs
+while avoiding full dense materialization of large pseudobulk matrices.
+
+It does not replace the edgeR statistical documentation. Use edgeR's guidance to
+choose the model, contrast, test, and filtering strategy; use `edger.bp` when
+the same workflow needs BPCells-backed storage and blockwise execution.
+
+## Function Mapping
+
+`edger.bp` has two layers. The high-level workflow functions run preparation,
+normalization, optional filtering, dispersion estimation when needed, and the
+final GLM test. The lower-level GLM functions assume those preparation steps
+have already been handled and run only the blockwise fitting/testing stage.
+
+| edgeR operation | High-level workflow | Lower-level function | Notes |
+| --- | --- | --- | --- |
+| `filterByExpr()` | `bp_prepare_dge(filter = TRUE)` | `bp_filter_by_expr()` | Runs on BPCells-backed counts. |
+| `normLibSizes(method = "TMM")` | `bp_prepare_dge()` | `bp_calc_norm_factors()` | `TMM` and `none` are supported. |
+| `DGEList()` preparation | `bp_prepare_dge()` | none | Returns filtered counts, library sizes, normalization factors, and offsets. |
+| `estimateDisp()` | `bp_lrt()`, `bp_qlf()`, or `bp_treat()` when `dispersion = NULL` | `bp_estimate_disp_stream()` | Main streamed estimator. |
+| dense `estimateDisp()` oracle | `bp_lrt()`, `bp_qlf()`, or `bp_treat()` with `dispersion.method = "dense"` | `bp_estimate_disp_dense()` | Intended for small-data checks. |
+| `glmFit()` + `glmLRT()` | `bp_lrt()` | `bp_glm_lrt()` | Supports coefficient and contrast tests. |
+| `glmQLFit()` + `glmQLFTest()` | `bp_qlf()` | `bp_glm_qlf()` | Modern QL is the default; legacy QL is available. |
+| `glmQLFit()` + `glmTreat()` | `bp_treat()` | `bp_glm_treat()` | Modern Treat is the default; legacy Treat is available. |
+
+## Choosing a Statistical Test
+
+The package provides three test families and seven test configurations. The
+modern quasi-likelihood implementations are the defaults.
+
+| Test configuration | Lower-level call | Null hypothesis | Reference distribution | Multiple coefficients? | Typical use |
+| --- | --- | --- | --- | --- | --- |
+| Likelihood-ratio test | `bp_glm_lrt()` | Selected coefficient(s) or contrast(s) equal zero | Chi-squared | Yes | Fast testing when NB dispersions are treated as fixed. |
+| Modern QLF | `bp_glm_qlf(..., legacy = FALSE)` | Selected coefficient(s) or contrast(s) equal zero | Modern quasi-likelihood F | Yes | Recommended general-purpose differential-expression test. |
+| Legacy QLF | `bp_glm_qlf(..., legacy = TRUE)` | Selected coefficient(s) or contrast(s) equal zero | Legacy quasi-likelihood F | Yes | Compatibility with older edgeR QL workflows. |
+| Modern Treat, interval null | `bp_glm_treat(..., legacy = FALSE, null = "interval")` | Absolute log2 fold change is no larger than `lfc` | Modern QL threshold test | One contrast | Recommended when a minimum biologically relevant effect is required. |
+| Modern Treat, worst-case null | `bp_glm_treat(..., legacy = FALSE, null = "worst.case")` | Threshold null evaluated at its least-favourable boundary | Modern QL threshold test | One contrast | More conservative threshold formulation. |
+| Legacy Treat, interval null | `bp_glm_treat(..., legacy = TRUE, null = "interval")` | Absolute log2 fold change is no larger than `lfc` | Legacy QL threshold test | One contrast | Threshold testing compatible with older edgeR QL workflows. |
+| Legacy Treat, worst-case null | `bp_glm_treat(..., legacy = TRUE, null = "worst.case")` | Threshold null evaluated at its least-favourable boundary | Legacy QL threshold test | One contrast | Conservative threshold testing with legacy QL semantics. |
+
+Each family has a lower-level fitting/testing function and an end-to-end
+workflow:
+
+| Test family | Lower-level function | End-to-end workflow |
+| --- | --- | --- |
+| LRT | `bp_glm_lrt()` | `bp_lrt()` |
+| QLF | `bp_glm_qlf()` | `bp_qlf()` |
+| Treat | `bp_glm_treat()` | `bp_treat()` |
+
+The lower-level functions require a design, dispersions, and offsets or library
+sizes. The end-to-end workflows can also filter genes, calculate TMM
+normalization factors, and estimate dispersions. Select legacy QL semantics in
+the high-level workflows through `qlf.args` or `treat.args`:
+
+```r
+bp_qlf(
+    y,
+    design = design,
+    group = group,
+    coef = 2,
+    qlf.args = list(legacy = TRUE)
+)
+
+bp_treat(
+    y,
+    design = design,
+    group = group,
+    coef = 2,
+    lfc = log2(1.2),
+    null = "interval",
+    treat.args = list(legacy = TRUE)
+)
+```
+
+The default Treat threshold is `log2(1.2)`. Setting `lfc = 0` delegates to the
+corresponding QLF test. Treat tests one coefficient or one contrast; LRT and QLF
+also support joint tests of multiple coefficients or contrast columns.
+
+As a practical starting point, use modern QLF for a zero-effect primary
+analysis, modern Treat when the scientific question includes a minimum effect
+size, and LRT when speed or exploratory sensitivity is the priority. Legacy QLF
+and Treat are primarily compatibility and sensitivity-analysis paths.
+
+In most analyses, start with a high-level workflow:
+
+```r
+bp_lrt(y, design = design, group = group, coef = "groupB")
+bp_qlf(y, design = design, group = group, coef = "groupB")
+bp_treat(y, design = design, group = group, coef = "groupB")
+```
+
+These calls correspond to the usual native edgeR sequence of constructing a
+`DGEList`, filtering, normalizing, estimating dispersions, fitting a GLM, and
+testing a coefficient or contrast.
+
+Use the lower-level functions when you want explicit control over intermediate
+objects. Common reasons are to reuse one prepared matrix, supply a dispersion
+vector estimated elsewhere, compare one stage directly with native edgeR, or
+avoid repeating preparation inside a loop.
+
+For example, the high-level call:
+
+```r
+bp_lrt(y, design = design, group = group, coef = "groupB")
+```
+
+is roughly equivalent to:
+
+```r
+prep <- bp_prepare_dge(y, design = design, group = group)
+disp <- bp_estimate_disp_stream(
+    prep$counts,
+    design = design,
+    group = group,
+    lib.size = prep$effective.lib.size,
+    offset = prep$offset
+)
+
+lrt <- bp_glm_lrt(
+    prep$counts,
+    design = design,
+    dispersion = disp$tagwise.dispersion,
+    offset = prep$offset,
+    coef = "groupB"
+)
+```
+
+The same relationship holds for `bp_qlf()` versus `bp_glm_qlf()`, and
+`bp_treat()` versus `bp_glm_treat()`.
+
+## Supported Scope
+
+The audited path covers non-negative count matrices with genes as rows and
+samples or pseudobulk columns as columns. The current package focuses on:
+
+* TMM normalization or no normalization;
+* edgeR-compatible expression filtering;
+* common, trended, and tagwise dispersion estimation;
+* coefficient and contrast tests;
+* LRT, modern QLF, legacy QLF, modern Treat, and legacy Treat;
+* scalar or gene-level supplied dispersions;
+* sample-level offsets represented as a vector, or row-constant offset matrices.
+
+The following edgeR features are not part of the supported path unless they are
+separately audited and tested:
+
+* robust dispersion or robust QL estimation;
+* observation weights;
+* gene-specific offset matrices;
+* normalization methods other than `TMM` and `none`;
+* exact compatibility with edgeR versions other than the audited version.
+
+Check the audited versions with:
+
+```{r versions}
+library(edger.bp)
+
+bp_check_versions(error = FALSE)
+```
+
+## Native edgeR and edger.bp Side by Side
+
+This small example runs the same two-group workflow with native edgeR and
+`edger.bp`.
+
+```{r data}
+library(edgeR)
+library(BPCells)
+library(Matrix)
+
+set.seed(48)
+
+ngenes <- 115L
+nsamples <- 6L
+group <- factor(rep(c("A", "B"), each = 3L))
+design <- model.matrix(~ group)
+
+base_mean <- rgamma(ngenes, shape = 2, rate = 0.2)
+counts <- vapply(seq_len(nsamples), function(j) {
+    as.integer(rnbinom(ngenes, mu = base_mean, size = 4))
+}, integer(ngenes))
+
+counts[sample(length(counts), size = floor(length(counts) * 0.35))] <- 0L
+counts[1:3, ] <- 0L
+
+rownames(counts) <- paste0("gene", seq_len(ngenes))
+colnames(counts) <- paste0("sample", seq_len(nsamples))
+
+bp_dir <- tempfile("edger-bp-functionality-")
+bp_counts <- BPCells::write_matrix_dir(
+    BPCells::convert_matrix_type(Matrix(counts, sparse = TRUE), "uint32_t"),
+    dir = bp_dir
+)
+```
+
+The native edgeR workflow is:
+
+```{r native-edger}
+dge <- DGEList(counts)
+keep <- filterByExpr(dge, design = design, group = group)
+dge <- dge[keep, , keep.lib.sizes = FALSE]
+dge <- normLibSizes(dge)
+dge <- estimateDisp(dge, design = design)
+
+fit_lrt <- glmFit(dge, design = design)
+edge_lrt <- glmLRT(fit_lrt, coef = 2)
+
+fit_ql <- glmQLFit(
+    dge,
+    design = design,
+    dispersion = dge$tagwise.dispersion,
+    legacy = FALSE
+)
+edge_qlf <- glmQLFTest(fit_ql, coef = 2)
+edge_treat <- glmTreat(fit_ql, coef = 2)
+```
+
+The corresponding high-level `edger.bp` calls are:
+
+```{r edger-bp}
+bp_lrt_fit <- bp_lrt(
+    bp_counts,
+    design = design,
+    group = group,
+    coef = 2,
+    block.size = 10L,
+    workers = 1L
+)
+
+bp_qlf_fit <- bp_qlf(
+    bp_counts,
+    design = design,
+    group = group,
+    coef = 2,
+    block.size = 10L,
+    workers = 1L
+)
+
+bp_treat_fit <- bp_treat(
+    bp_counts,
+    design = design,
+    group = group,
+    coef = 2,
+    block.size = 10L,
+    workers = 1L
+)
+```
+
+A compact numerical comparison:
+
+```{r compare}
+max_abs_diff <- function(x, y) {
+    max(abs(x - y), na.rm = TRUE)
+}
+
+data.frame(
+    quantity = c(
+        "filter keep vector",
+        "TMM norm factors",
+        "tagwise dispersion",
+        "LRT p-values",
+        "modern QLF p-values",
+        "modern Treat p-values"
+    ),
+    max_abs_diff = c(
+        max_abs_diff(as.integer(bp_lrt_fit$prepare$keep), as.integer(keep)),
+        max_abs_diff(bp_lrt_fit$prepare$norm.factors, dge$samples$norm.factors),
+        max_abs_diff(bp_lrt_fit$dispersion$tagwise.dispersion, dge$tagwise.dispersion),
+        max_abs_diff(bp_lrt_fit$lrt$table$PValue, edge_lrt$table$PValue),
+        max_abs_diff(bp_qlf_fit$qlf$table$PValue, edge_qlf$table$PValue),
+        max_abs_diff(bp_treat_fit$treat$table$PValue, edge_treat$table$PValue)
+    )
+)
+```
+
+These comparisons are the package's main correctness target: for supported
+inputs, the BPCells-backed workflow should match the corresponding native edgeR
+workflow to numerical tolerance.
+
+## Coefficients, Contrasts, and Marker Designs
+
+`coef` and `contrast` follow edgeR conventions. Coefficients can be selected by
+index or by design column name:
+
+```{r coef-contrast, eval = FALSE}
+bp_lrt(bp_counts, design = design, group = group, coef = "groupB")
+
+contrast <- c("(Intercept)" = 0, "groupB" = 1)
+bp_lrt(bp_counts, design = design, group = group, contrast = contrast)
+```
+
+For marker testing, a binary one-vs-rest design and a multi-cluster contrast
+design answer related but different questions:
+
+```{r marker-designs, eval = FALSE}
+# Binary one-vs-rest: selected cluster against all other columns pooled together.
+selected <- col_data$cluster == "cl01"
+design_binary <- model.matrix(~ selected)
+bp_treat(bp_counts, design = design_binary, group = selected, coef = "selectedTRUE")
+
+# Multi-cluster contrasts: one shared model with explicit cluster contrasts.
+cluster <- factor(col_data$cluster)
+design_cluster <- model.matrix(~ 0 + cluster)
+contrast_cl01 <- rep(-1 / (nlevels(cluster) - 1), nlevels(cluster))
+names(contrast_cl01) <- colnames(design_cluster)
+contrast_cl01["clustercl01"] <- 1
+bp_treat(bp_counts, design = design_cluster, group = cluster, contrast = contrast_cl01)
+```
+
+The second pattern can be faster for many clusters because the QL fit can be
+shared, but it changes the estimand. Choose the design for the scientific
+question first, then tune the implementation.
+
+## Runtime Controls
+
+`edger.bp` materializes blocks of genes for edgeR GLM fitting. The main controls
+are:
+
+* `block.size`: larger blocks reduce overhead but increase memory per worker;
+* `workers`: parallel row-block workers for supported stages;
+* BPCells storage order: column-ordered matrices are efficient for sample-wise
+  operations, while row-ordered companions can help gene-block operations.
+
+For full pseudobulk datasets, use Slurm rather than an interactive session and
+record the package versions, design matrix, contrast, `block.size`, `workers`,
+and peak memory.

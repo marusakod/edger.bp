@@ -1,0 +1,6 @@
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+*.Rcheck/
+edger.bp_*.tar.gz

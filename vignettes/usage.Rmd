@@ -1,0 +1,265 @@
+---
+title: "Using edger.bp"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using edger.bp}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment = "#>",
+    message = FALSE,
+    warning = FALSE
+)
+```
+
+`edger.bp` runs edgeR-compatible analyses on genes-by-samples count matrices
+stored with BPCells. It is intended for pseudobulk matrices where the number of
+genes is large enough that row-blocked GLM fitting and file-backed storage are
+useful.
+
+The package does not define new statistical methods. It mirrors supported edgeR
+workflows for BPCells-backed matrices, so statistical choices should follow the
+edgeR documentation.
+
+## Data Contract
+
+Inputs should satisfy the usual edgeR count-matrix requirements:
+
+* rows are genes or features;
+* columns are samples or pseudobulk sample-cluster columns;
+* entries are non-negative integer counts;
+* row names and column names are present and unique;
+* `nrow(design)` equals the number of matrix columns;
+* optional `group` values are aligned to the matrix columns.
+
+For large analyses, create the BPCells matrix before calling `edger.bp`. Keep a
+column metadata table alongside it with any sample, cluster, batch, or donor
+fields needed to build design matrices.
+
+## A Small Runnable Example
+
+The example below simulates a small two-group pseudobulk experiment and writes
+the counts to a temporary BPCells directory.
+
+```{r simulate}
+library(edger.bp)
+library(BPCells)
+library(Matrix)
+
+set.seed(7)
+
+ngenes <- 120L
+nsamples <- 8L
+group <- factor(rep(c("ctrl", "stim"), each = 4L))
+
+base_mean <- rgamma(ngenes, shape = 2, rate = 0.15)
+fold_change <- rep(1, ngenes)
+fold_change[seq_len(12L)] <- 2.5
+
+counts <- vapply(seq_len(nsamples), function(j) {
+    mu <- base_mean * ifelse(group[[j]] == "stim", fold_change, 1)
+    as.integer(rnbinom(ngenes, mu = mu, size = 8))
+}, integer(ngenes))
+
+rownames(counts) <- paste0("gene", seq_len(ngenes))
+colnames(counts) <- paste0("sample", seq_len(nsamples))
+
+bp_dir <- tempfile("edger-bp-counts-")
+sparse_counts <- Matrix(counts, sparse = TRUE)
+sparse_counts <- BPCells::convert_matrix_type(sparse_counts, "uint32_t")
+bp_counts <- BPCells::write_matrix_dir(sparse_counts, dir = bp_dir)
+
+design <- model.matrix(~ group)
+colnames(design)
+```
+
+The audited package versions can be checked explicitly:
+
+```{r versions}
+bp_check_versions(error = FALSE)
+```
+
+## Likelihood-Ratio Test
+
+`bp_lrt()` runs preparation, optional filtering, TMM normalization, dispersion
+estimation, and blockwise GLM LRT testing. The returned object keeps those
+stages separate.
+
+```{r lrt}
+lrt_fit <- bp_lrt(
+    bp_counts,
+    design = design,
+    group = group,
+    coef = "groupstim",
+    dispersion.method = "stream",
+    block.size = 50L,
+    workers = 1L
+)
+
+names(lrt_fit)
+head(lrt_fit$lrt$table[order(lrt_fit$lrt$table$PValue), ])
+```
+
+Important components are:
+
+* `prepare`: filtered counts, library sizes, normalization factors, and offsets;
+* `dispersion`: common, trended, and tagwise dispersion estimates;
+* `lrt$table`: the edgeR-style result table for the requested coefficient or
+  contrast.
+
+## QL F-Test and Treat
+
+`bp_qlf()` and `bp_treat()` use edgeR's modern quasi-likelihood path by default.
+They can also accept a supplied scalar or gene-level dispersion vector when that
+matches the intended edgeR analysis.
+
+```{r qlf}
+qlf_fit <- bp_qlf(
+    bp_counts,
+    design = design,
+    group = group,
+    coef = "groupstim",
+    dispersion.method = "stream",
+    block.size = 50L,
+    workers = 1L
+)
+
+head(qlf_fit$qlf$table[order(qlf_fit$qlf$table$PValue), ])
+```
+
+`bp_treat()` tests whether the effect exceeds a log2 fold-change threshold. The
+default threshold follows edgeR's `glmTreat()` default, `log2(1.2)`.
+
+```{r treat}
+treat_fit <- bp_treat(
+    bp_counts,
+    design = design,
+    group = group,
+    coef = "groupstim",
+    dispersion.method = "stream",
+    lfc = log2(1.2),
+    block.size = 50L,
+    workers = 1L
+)
+
+head(treat_fit$treat$table[order(treat_fit$treat$table$PValue), ])
+```
+
+For legacy edgeR quasi-likelihood comparisons, use `qlf.args` or `treat.args`:
+
+```{r legacy, eval = FALSE}
+bp_qlf(
+    bp_counts,
+    design = design,
+    group = group,
+    coef = "groupstim",
+    qlf.args = list(legacy = TRUE)
+)
+
+bp_treat(
+    bp_counts,
+    design = design,
+    group = group,
+    coef = "groupstim",
+    treat.args = list(legacy = TRUE)
+)
+```
+
+## One-vs-Rest Marker Tests
+
+A common marker workflow builds one binary design per cluster. The pseudobulk
+matrix still has genes as rows and pseudobulk columns as samples; only the design
+changes.
+
+```{r one-vs-rest, eval = FALSE}
+cluster <- col_data$cluster
+selected <- cluster == "cl01"
+design_marker <- model.matrix(~ selected)
+
+marker_cl01 <- bp_treat(
+    bp_counts,
+    design = design_marker,
+    group = selected,
+    coef = "selectedTRUE",
+    lfc = log2(1.2),
+    block.size = 1000L,
+    workers = 4L
+)
+
+marker_table <- marker_cl01$treat$table
+```
+
+This binary one-vs-rest design directly compares the selected cluster to all
+other columns pooled together. A shared `~ 0 + cluster` design with contrasts can
+be faster for many clusters, but it is a different estimand and should be chosen
+deliberately.
+
+## Storage Order and Parallelism
+
+BPCells matrices have a physical storage order. Column-ordered storage is useful
+for sample-wise operations such as library sizes and TMM normalization. Row-
+ordered storage is useful for blockwise gene operations. If you need a companion
+matrix with the other storage order, use `bp_ensure_storage_order()`.
+
+```{r storage-order, eval = FALSE}
+bp_counts_row <- bp_ensure_storage_order(
+    bp_counts,
+    order = "row",
+    outdir = "cache/counts_row",
+    tmpdir = "cache/tmp"
+)
+```
+
+The main tuning arguments are:
+
+* `block.size`: number of genes materialized per edgeR block;
+* `workers`: number of row blocks processed in parallel where supported;
+* Slurm resources: for full datasets, run package workflows in batch jobs and
+  budget memory as roughly proportional to `workers * block.size * ncol(y)`.
+
+Small interactive checks should use `workers = 1L` or `2L`. Full pseudobulk
+marker runs should use Slurm and an explicit wall-time/QoS choice appropriate to
+the cluster.
+
+## Full-Scale Workflow
+
+A typical full-scale analysis is:
+
+1. Build or load a genes-by-pseudobulk BPCells count matrix.
+2. Load column metadata and construct the design matrix.
+3. Run a small smoke test on a subset of genes or clusters.
+4. Run the full workflow with recorded `block.size`, `workers`, package
+   versions, and Slurm resources.
+5. Save the result table plus enough metadata to reproduce the design and
+   contrast.
+
+For example:
+
+```{r full-scale, eval = FALSE}
+bp_counts <- BPCells::open_matrix_dir("cache/counts_col")
+col_data <- read.delim("cache/sample_metadata.tsv")
+
+group <- factor(col_data$condition)
+design <- model.matrix(~ group)
+
+fit <- bp_treat(
+    bp_counts,
+    design = design,
+    group = group,
+    coef = "grouptreated",
+    block.size = 1000L,
+    workers = 8L
+)
+
+write.table(
+    fit$treat$table,
+    file = "results/edgeR_treat.tsv",
+    sep = "\t",
+    quote = FALSE,
+    col.names = NA
+)
+```

@@ -1,0 +1,21 @@
+Package: edger.bp
+Title: Memory-Efficient edgeR Workflows for BPCells Matrices
+Version: 0.0.0.9000
+Authors@R:
+    person("Will", "Macnair", email = "will.macnair@roche.com",
+           role = c("aut", "cre"))
+Author: Will Macnair [aut, cre]
+Maintainer: Will Macnair <will.macnair@roche.com>
+Description: Provides memory-efficient edgeR-compatible workflows for
+    pseudobulk count matrices stored with BPCells.
+License: GPL-3
+Copyright: 2026 Will Macnair
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Depends: R (>= 4.4)
+Imports: BPCells (>= 0.3.1), edgeR (>= 4.4.0), limma (>= 3.62.0)
+Suggests: knitr, Matrix, rmarkdown, testthat (>= 3.0.0)
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+NeedsCompilation: no
+Packaged: 2026-07-28 11:55:11 UTC; macnairw
