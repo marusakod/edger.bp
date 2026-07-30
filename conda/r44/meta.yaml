@@ -1,4 +1,4 @@
-{% set version = "0.1.0" %}
+{% set version = "0.1.1" %}
 
 package:
   name: r-edger-bp
@@ -6,7 +6,7 @@ package:
 
 source:
   url: https://github.com/wmacnair/edger.bp/archive/refs/tags/v{{ version }}.tar.gz
-  sha256: 9cdc55937fb27022c06caf3866a7b0c6621a4002811b4502157cb56fe9de6690
+  sha256: a03f6440457b0a8eea33e074e10ff984374a529fb4d25a48657ab70547488e4c
 
 build:
   number: 0
