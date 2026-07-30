@@ -17,10 +17,10 @@ micromamba create -n edger-bp \
   --channel conda-forge \
   --channel bioconda \
   --strict-channel-priority \
-  r-edger-bp=0.1.0=r44_0
+  r-edger-bp=0.1.1=r44_0
 ```
 
-An audited R 4.5 build is also available as `r-edger-bp=0.1.0=r45_0`.
+An audited R 4.5 build is also available as `r-edger-bp=0.1.1=r45_0`.
 See [the Conda channel documentation](conda/README.md) for details.
 
 ### R source package

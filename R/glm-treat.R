@@ -132,6 +132,7 @@ bp_glm_treat <- function(y,
             prior.count = prior.count,
             block.size = block.size,
             workers = workers,
+            keep.coefficients = TRUE,
             ...
         )
     }
@@ -436,13 +437,17 @@ bp_glm_treat <- function(y,
         block.offset <- .block_offset(offset, rows, ntags, nlibs)
         block.dispersion <- .block_dispersion(dispersion, rows, ntags)
         fit.dispersion <- block.dispersion / average.ql.dispersion
-        fit <- edgeR::glmFit(
-            block,
-            design = design,
-            dispersion = fit.dispersion,
-            offset = block.offset,
-            prior.count = prior.count,
-            ...
+        # The modern QL statistics pass already fitted this alternative model
+        # at `fit.dispersion`; reuse its coefficients instead of fitting it a
+        # second time before the four threshold-constrained Treat fits.
+        fit <- list(
+            coefficients = ql.stats$coefficients[rows, , drop = FALSE],
+            unshrunk.coefficients = ql.stats$unshrunk.coefficients[
+                rows,
+                ,
+                drop = FALSE
+            ],
+            prior.count = prior.count
         )
         fit$dispersion <- if (length(block.dispersion) == 1L) {
             rep(block.dispersion, length(rows))

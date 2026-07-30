@@ -269,6 +269,7 @@ bp_glm_qlf <- function(y,
                                     coef = ncol(design),
                                     contrast = NULL,
                                     keep.fitted = FALSE,
+                                    keep.coefficients = FALSE,
                                     compute.test = FALSE,
                                     ...) {
     dims <- .check_count_matrix(y)
@@ -352,6 +353,15 @@ bp_glm_qlf <- function(y,
             df.residual.adj = adj$df,
             deviance.adj = adj$deviance,
             test = test,
+            # Modern Treat uses this exact scaled-dispersion fit. Retaining
+            # only its small coefficient matrices avoids repeating the full
+            # genes-by-samples GLM optimization in the Treat pass.
+            coefficients = if (isTRUE(keep.coefficients)) fit$coefficients else NULL,
+            unshrunk.coefficients = if (isTRUE(keep.coefficients)) {
+                fit$unshrunk.coefficients
+            } else {
+                NULL
+            },
             fitted.values = if (isTRUE(compute.test) && isTRUE(keep.fitted)) {
                 fit$fitted.values
             } else {
@@ -373,6 +383,18 @@ bp_glm_qlf <- function(y,
         deviance.adj = deviance.adj,
         average.ql.dispersion = average.ql.dispersion
     )
+    if (isTRUE(keep.coefficients)) {
+        out$coefficients <- do.call(
+            rbind,
+            lapply(block.results, `[[`, "coefficients")
+        )
+        out$unshrunk.coefficients <- do.call(
+            rbind,
+            lapply(block.results, `[[`, "unshrunk.coefficients")
+        )
+        rownames(out$coefficients) <- rownames(y)
+        rownames(out$unshrunk.coefficients) <- rownames(y)
+    }
     if (isTRUE(compute.test)) {
         test.results <- lapply(block.results, `[[`, "test")
         out$test <- list(
