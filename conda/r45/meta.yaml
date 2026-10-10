@@ -5,7 +5,7 @@ package:
   version: {{ version }}
 
 source:
-  url: https://github.com/marusakod/edger.bp/releases/download/v{{ version }}/edger.bp_{{ version }}.tar.gz
+  url: https://raw.githubusercontent.com/marusakod/edger.bp/conda-channel/src/edger.bp_{{ version }}.tar.gz
   sha256: bd4777c9986fccedfb13ed568db90062d1e414a6faba24dfdcd3bcd50624ee75
 
 build:
