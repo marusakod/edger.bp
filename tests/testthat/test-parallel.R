@@ -4,6 +4,33 @@ test_that("block workers are prescheduled instead of forked per task", {
     expect_lte(length(unique(unlist(pids))), 2L)
 })
 
+test_that("parallel block errors retain task and condition context", {
+    labels <- sprintf("block %d of 8 (gene rows %d-%d)", seq_len(8L),
+        seq.int(1L, 71L, by = 10L), seq.int(10L, 80L, by = 10L))
+
+    error <- tryCatch(
+        .block_lapply(
+            seq_len(8L),
+            workers = 2L,
+            function(i) {
+                if (i == 4L) stop("deliberate worker failure")
+                i
+            },
+            .context = "QL average-dispersion pass 1",
+            .labels = labels
+        ),
+        error = identity
+    )
+
+    expect_s3_class(error, "error")
+    message <- conditionMessage(error)
+    expect_match(message, "during QL average-dispersion pass 1", fixed = TRUE)
+    expect_match(message, "block 4 of 8 (gene rows 31-40)", fixed = TRUE)
+    expect_match(message, "worker PID: [0-9]+")
+    expect_match(message, "condition: simpleError/error/condition", fixed = TRUE)
+    expect_match(message, "message: deliberate worker failure", fixed = TRUE)
+})
+
 test_that("streamed filtering is invariant to worker count", {
     fixture <- make_counts(ngenes = 90, nsamples = 6, seed = 50)
     bp <- make_bp_matrix(fixture$counts)

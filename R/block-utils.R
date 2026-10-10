@@ -34,18 +34,109 @@
     invisible(NULL)
 }
 
-.block_lapply <- function(x, workers, FUN, ...) {
+.block_lapply <- function(x,
+                          workers,
+                          FUN,
+                          ...,
+                          .context = NULL,
+                          .labels = NULL) {
     workers <- .check_workers(workers)
-    if (workers == 1L || length(x) <= 1L) {
-        return(lapply(x, FUN, ...))
+    n.tasks <- length(x)
+    if (is.null(.labels)) {
+        .labels <- sprintf("task %d of %d", seq_len(n.tasks), n.tasks)
+    } else if (!is.character(.labels) || length(.labels) != n.tasks || anyNA(.labels)) {
+        stop("`.labels` must be a character vector with one value per task.", call. = FALSE)
     }
-    parallel::mclapply(
-        x,
-        FUN,
-        ...,
-        mc.cores = workers,
-        mc.preschedule = TRUE
+    if (!is.null(.context) &&
+        (!is.character(.context) || length(.context) != 1L || is.na(.context))) {
+        stop("`.context` must be NULL or a character scalar.", call. = FALSE)
+    }
+
+    run.one <- function(i) {
+        tryCatch(
+            list(
+                ok = TRUE,
+                value = FUN(x[[i]], ...),
+                task = i,
+                pid = Sys.getpid()
+            ),
+            error = function(e) {
+                condition.call <- conditionCall(e)
+                list(
+                    ok = FALSE,
+                    value = NULL,
+                    task = i,
+                    pid = Sys.getpid(),
+                    condition.class = paste(class(e), collapse = "/"),
+                    condition.message = conditionMessage(e),
+                    condition.call = if (is.null(condition.call)) {
+                        NULL
+                    } else {
+                        paste(deparse(condition.call, width.cutoff = 500L), collapse = " ")
+                    }
+                )
+            }
+        )
+    }
+
+    task.ids <- seq_len(n.tasks)
+    if (.bp_psock_state$worker && workers > 1L) {
+        stop("Nested parallel workers are not supported inside a PSOCK task.")
+    }
+    if (!is.null(.bp_psock_state$pool)) {
+        results <- .psock_block_lapply(x, workers, FUN, .context, list(...))
+    } else if (workers == 1L || n.tasks <= 1L) {
+        results <- lapply(task.ids, run.one)
+    } else {
+        results <- parallel::mclapply(
+            task.ids,
+            run.one,
+            mc.cores = workers,
+            mc.preschedule = TRUE
+        )
+    }
+
+    ok <- vapply(
+        results,
+        function(result) is.list(result) && isTRUE(result$ok),
+        logical(1)
     )
+    if (!all(ok)) {
+        failed <- which(!ok)
+        details <- vapply(failed, function(i) {
+            result <- results[[i]]
+            if (!is.list(result) || is.null(result$ok)) {
+                returned <- paste(as.character(result), collapse = " ")
+                return(paste0(
+                    "  ", .labels[[i]], "\n",
+                    "    worker result: ", returned
+                ))
+            }
+
+            lines <- c(
+                paste0("  ", .labels[[i]]),
+                paste0("    worker PID: ", result$pid),
+                paste0("    condition: ", result$condition.class),
+                paste0("    message: ", result$condition.message)
+            )
+            if (!is.null(result$condition.call)) {
+                lines <- c(lines, paste0("    call: ", result$condition.call))
+            }
+            paste(lines, collapse = "\n")
+        }, character(1))
+        context <- if (is.null(.context) || !nzchar(.context)) {
+            ""
+        } else {
+            paste0(" during ", .context)
+        }
+        stop(
+            "Block processing failed", context, ":\n",
+            paste(details, collapse = "\n"),
+            call. = FALSE
+        )
+    }
+
+    lapply(results, `[[`, "value")
 }
 
 .dense_slice <- function(y, i = TRUE, j = TRUE) {

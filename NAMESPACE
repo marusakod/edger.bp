@@ -1,4 +1,8 @@
 export(bp_calc_norm_factors)
+export(bp_start_psock_pool)
+export(bp_stop_psock_pool)
+export(bp_with_psock_pool)
+export(bp_block_lapply)
 export(bp_check_versions)
 export(bp_ensure_storage_order)
 export(bp_estimate_disp_dense)

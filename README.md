@@ -20,7 +20,7 @@ micromamba create -n edger-bp \
   r-edger-bp=0.1.1=r44_0
 ```
 
-An audited R 4.5 build is also available as `r-edger-bp=0.1.1=r45_0`.
+An audited R 4.5 build is also available as `r-edger-bp=0.1.2=r45_0`.
 See [the Conda channel documentation](conda/README.md) for details.
 
 ### R source package
@@ -48,7 +48,7 @@ if (!requireNamespace("remotes", quietly = TRUE)) {
     install.packages("remotes")
 }
 
-remotes::install_github("wmacnair/edger.bp", build_vignettes = FALSE)
+remotes::install_github("marusakod/edger.bp", build_vignettes = FALSE)
 ```
 
 To install from a local checkout instead:

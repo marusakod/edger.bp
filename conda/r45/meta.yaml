@@ -1,12 +1,12 @@
-{% set version = "0.1.1" %}
+{% set version = "0.1.2" %}
 
 package:
   name: r-edger-bp
   version: {{ version }}
 
 source:
-  url: https://github.com/wmacnair/edger.bp/archive/refs/tags/v{{ version }}.tar.gz
-  sha256: a03f6440457b0a8eea33e074e10ff984374a529fb4d25a48657ab70547488e4c
+  url: https://github.com/marusakod/edger.bp/releases/download/v{{ version }}/edger.bp_{{ version }}.tar.gz
+  sha256: bd4777c9986fccedfb13ed568db90062d1e414a6faba24dfdcd3bcd50624ee75
 
 build:
   number: 0
@@ -17,24 +17,26 @@ build:
 
 requirements:
   host:
-    - r-base ==4.5.3
-    - r-bpcells ==0.3.1
-    - bioconductor-edger ==4.8.2
-    - bioconductor-limma ==3.66.0
+    - r-codetools
+    - r-base 4.5.3 h502d0c9_3
+    - r-bpcells 0.3.1 r45hd5d28ae_1
+    - bioconductor-edger 4.8.2 r45h262fe30_1
+    - bioconductor-limma 3.66.0 r45h01b2380_0
   run:
-    - r-base ==4.5.3
-    - r-bpcells ==0.3.1
-    - bioconductor-edger ==4.8.2
-    - bioconductor-limma ==3.66.0
+    - r-codetools
+    - r-base ==4.5.3=h502d0c9_3
+    - r-bpcells ==0.3.1=r45hd5d28ae_1
+    - bioconductor-edger ==4.8.2=r45h262fe30_1
+    - bioconductor-limma ==3.66.0=r45h01b2380_0
 
 test:
   imports:
     - edger.bp
   commands:
-    - $R -e 'audit <- edger.bp::bp_check_versions(error = TRUE); stopifnot(all(audit$ok))'
+    - $R -e 'audit <- edger.bp::bp_check_versions(error = TRUE); stopifnot(all(audit$ok), all(c("bp_start_psock_pool", "bp_stop_psock_pool", "bp_with_psock_pool") %in% getNamespaceExports("edger.bp")))'
 
 about:
-  home: https://github.com/wmacnair/edger.bp
+  home: https://github.com/marusakod/edger.bp
   license: GPL-3.0-only
   license_family: GPL
   license_file: LICENSE

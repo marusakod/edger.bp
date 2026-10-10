@@ -1,6 +1,7 @@
 # Conda recipes
 
-The recipes build `r-edger-bp` 0.1.1 from the tagged GitHub source archive.
+The R 4.5 recipe builds `r-edger-bp` 0.1.2 from the release source tarball.
+The R 4.4 recipe retains the previously audited 0.1.1 build.
 
 - `r44` targets the audited R 4.4.3, edgeR 4.4.0, limma 3.62.0, and
   BPCells 0.3.1 stack. All dependencies are available from conda-forge and

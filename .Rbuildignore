@@ -1,0 +1,9 @@
+^AGENTS\.md$
+^dev$
+^\.agents$
+^\.codex$
+^.*[.]Rcheck$
+^\.git$
+^\.gitignore$
+^\.Rproj\.user$
+^slurm_checks\.(sh|out)$

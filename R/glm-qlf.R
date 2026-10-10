@@ -449,6 +449,16 @@ bp_glm_qlf <- function(y,
     ntags <- dims[1L]
     nlibs <- dims[2L]
     block.ids <- .row_block_indices(ntags, block.size)
+    block.labels <- vapply(seq_along(block.ids), function(b) {
+        rows <- block.ids[[b]]
+        sprintf(
+            "block %d of %d (gene rows %d-%d)",
+            b,
+            length(block.ids),
+            rows[[1L]],
+            rows[[length(rows)]]
+        )
+    }, character(1))
     computeAdjVec <- .edgeR_internal(".cxx_compute_adj_vec")
     compressDispersions <- .edgeR_internal(".compressDispersions")
 
@@ -493,7 +503,9 @@ bp_glm_qlf <- function(y,
             df = adj$df,
             coefficients = fit$coefficients
         )
-    })
+    },
+    .context = "QL average-dispersion pass 1",
+    .labels = block.labels)
     first <- .combine_ql_average_results(first.results, ntags)
     prior <- .ql_modern_compute_prior(ave.log.cpm, first$s2, first$df)
 
@@ -525,7 +537,9 @@ bp_glm_qlf <- function(y,
         )
 
         list(rows = rows, s2 = adj$s2, df = adj$df)
-    })
+    },
+    .context = "QL average-dispersion pass 2",
+    .labels = block.labels)
     second <- .combine_ql_average_results(second.results, ntags)
     .ql_modern_compute_prior(ave.log.cpm, second$s2, second$df)
 }
