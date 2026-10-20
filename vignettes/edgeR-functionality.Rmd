@@ -167,7 +167,7 @@ separately audited and tested:
 * observation weights;
 * gene-specific offset matrices;
 * normalization methods other than `TMM` and `none`;
-* exact compatibility with edgeR versions other than the audited version.
+* exact compatibility with edgeR versions outside the audited dependency stacks.
 
 Check the audited versions with:
 
@@ -272,7 +272,7 @@ max_abs_diff <- function(x, y) {
     max(abs(x - y), na.rm = TRUE)
 }
 
-data.frame(
+comparison <- data.frame(
     quantity = c(
         "filter keep vector",
         "TMM norm factors",
@@ -289,6 +289,9 @@ data.frame(
         max_abs_diff(bp_qlf_fit$qlf$table$PValue, edge_qlf$table$PValue),
         max_abs_diff(bp_treat_fit$treat$table$PValue, edge_treat$table$PValue)
     )
+)
+knitr::kable(
+    transform(comparison, max_abs_diff = formatC(max_abs_diff, format = "e", digits = 2))
 )
 ```
 

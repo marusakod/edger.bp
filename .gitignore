@@ -4,3 +4,6 @@
 .Rproj.user/
 *.Rcheck/
 edger.bp_*.tar.gz
+
+# Generated package website
+/docs/

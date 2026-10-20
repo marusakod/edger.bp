@@ -1,0 +1,45 @@
+url: https://marusakod.github.io/edger.bp/
+
+template:
+  bootstrap: 5
+
+repo:
+  url:
+    home: https://github.com/marusakod/edger.bp/
+    source: https://github.com/marusakod/edger.bp/blob/main/
+    issue: https://github.com/marusakod/edger.bp/issues/
+
+articles:
+  - title: Guides
+    contents:
+      - usage
+      - edgeR-functionality
+
+reference:
+  - title: Analysis workflows
+    contents:
+      - bp_lrt
+      - bp_qlf
+      - bp_treat
+  - title: Count preparation and dispersion estimation
+    contents:
+      - bp_prepare_dge
+      - bp_filter_by_expr
+      - bp_library_sizes
+      - bp_calc_norm_factors
+      - bp_ensure_storage_order
+      - bp_estimate_disp_stream
+      - bp_estimate_disp_dense
+  - title: Blockwise GLM tests
+    contents:
+      - bp_glm_lrt
+      - bp_glm_qlf
+      - bp_glm_treat
+  - title: Parallel execution and compatibility
+    contents:
+      - bp_start_psock_pool
+      - bp_block_lapply
+      - bp_check_versions
+  - title: Package overview
+    contents:
+      - edger.bp-package

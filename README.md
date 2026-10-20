@@ -4,6 +4,30 @@ Memory-efficient edgeR-compatible workflows for BPCells-backed count matrices.
 
 Current high-level workflows are `bp_lrt()`, `bp_qlf()`, and `bp_treat()`.
 
+## Agreement with edgeR
+
+The [edgeR comparison vignette](https://marusakod.github.io/edger.bp/articles/edgeR-functionality.html)
+runs native edgeR and edger.bp on the same simulated counts (115 genes and six
+samples). The table below shows the maximum absolute differences for filtering,
+normalization, dispersion estimation, and three statistical tests. These results
+illustrate numerical agreement for this example under an audited dependency
+stack; the vignette describes the supported inputs and workflows.
+
+<!-- edger-comparison:start -->
+
+|Quantity              |Maximum absolute difference |
+|:---------------------|:---------------------------|
+|filter keep vector    |0.00e+00                    |
+|TMM norm factors      |0.00e+00                    |
+|tagwise dispersion    |0.00e+00                    |
+|LRT p-values          |0.00e+00                    |
+|modern QLF p-values   |1.04e-13                    |
+|modern Treat p-values |5.04e-14                    |
+
+Generated with edger.bp 0.1.2, R 4.5.3, edgeR 4.8.2, limma 3.66.0, and BPCells 0.3.1.
+
+<!-- edger-comparison:end -->
+
 ## Installation
 
 ### Conda
@@ -21,7 +45,7 @@ micromamba create -n edger-bp \
 ```
 
 An audited R 4.5 build is also available as `r-edger-bp=0.1.2=r45_0`.
-See [the Conda channel documentation](conda/README.md) for details.
+See [the Conda channel documentation](https://github.com/marusakod/edger.bp/blob/main/conda/README.md) for details.
 
 ### R source package
 
@@ -57,10 +81,11 @@ To install from a local checkout instead:
 remotes::install_local(".", build_vignettes = FALSE)
 ```
 
-See `vignette("usage", package = "edger.bp")` for a runnable package workflow.
+See [Using edger.bp](https://marusakod.github.io/edger.bp/articles/usage.html)
+for a runnable package workflow.
 
-See `vignette("edgeR-functionality", package = "edger.bp")` for the complete
-test matrix and guidance on choosing between LRT, modern or legacy QLF, and
+See [edgeR functionality in edger.bp](https://marusakod.github.io/edger.bp/articles/edgeR-functionality.html)
+for the complete test matrix and guidance on choosing between LRT, modern or legacy QLF, and
 modern or legacy Treat.
 
 ## License

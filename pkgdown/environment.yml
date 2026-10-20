@@ -1,0 +1,17 @@
+name: edger-bp-docs
+channels:
+  - https://raw.githubusercontent.com/marusakod/edger.bp/conda-channel
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - r-base=4.5.3=h502d0c9_3
+  - bioconductor-edger=4.8.2=r45h262fe30_1
+  - bioconductor-limma=3.66.0=r45h01b2380_0
+  - r-bpcells=0.3.1=r45hd5d28ae_1
+  - r-codetools
+  - r-matrix
+  - r-pkgdown
+  - r-rmarkdown
+  - r-knitr
+  - pandoc
